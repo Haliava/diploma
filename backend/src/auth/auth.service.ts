@@ -9,7 +9,6 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
 import { WebhookEventType } from '../common/enums/webhook-event.enum';
-import { ProfilesService } from '../profiles/profiles.service';
 import { UserDocument } from '../users/schemas/user.schema';
 import { UsersService } from '../users/users.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -27,25 +26,26 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
     private readonly jwtService: JwtService,
-    private readonly profilesService: ProfilesService,
     private readonly usersService: UsersService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
-    const existingUser = await this.usersService.findByPhone(dto.phone);
+    const existingUser = await this.usersService.findByEmail(dto.email);
 
     if (existingUser) {
-      throw new ConflictException('User with this phone already exists');
+      throw new ConflictException('User with this email already exists');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, this.passwordSaltRounds);
+    const passwordHash = await bcrypt.hash(
+      dto.password,
+      this.passwordSaltRounds,
+    );
     const user = await this.usersService.create({
-      phone: dto.phone,
+      email: dto.email,
       name: dto.name,
       passwordHash,
     });
 
-    await this.profilesService.createDefaultForUser(user._id);
     this.eventEmitter.emit(WebhookEventType.UserCreated, {
       user: this.usersService.toResponse(user),
     });
@@ -54,16 +54,19 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
-    const user = await this.usersService.findByPhone(dto.phone);
+    const user = await this.usersService.findByEmail(dto.email);
 
     if (!user || !user.isActive) {
-      throw new UnauthorizedException('Invalid phone or password');
+      throw new UnauthorizedException('Invalid email or password');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid phone or password');
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     return this.issueAuthResponse(user);
@@ -73,9 +76,12 @@ export class AuthService {
     let payload: JwtPayload;
 
     try {
-      payload = await this.jwtService.verifyAsync<JwtPayload>(dto.refreshToken, {
-        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-      });
+      payload = await this.jwtService.verifyAsync<JwtPayload>(
+        dto.refreshToken,
+        {
+          secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        },
+      );
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -102,10 +108,12 @@ export class AuthService {
     await this.usersService.updateRefreshTokenHash(userId, null);
   }
 
-  private async issueAuthResponse(user: UserDocument): Promise<AuthResponseDto> {
+  private async issueAuthResponse(
+    user: UserDocument,
+  ): Promise<AuthResponseDto> {
     const payload: JwtPayload = {
       sub: user.id,
-      phone: user.phone,
+      email: user.email,
       role: user.role,
     };
     const accessTokenExpiresIn = this.configService.get<string>(

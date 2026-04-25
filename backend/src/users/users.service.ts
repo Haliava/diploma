@@ -26,7 +26,7 @@ export class UsersService {
       });
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
-        throw new ConflictException('User with this phone already exists');
+        throw new ConflictException('User with this email already exists');
       }
 
       throw error;
@@ -49,8 +49,8 @@ export class UsersService {
     return this.userModel.findOne({ _id: id, isActive: true }).exec();
   }
 
-  async findByPhone(phone: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ phone }).exec();
+  async findByEmail(email: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ email: email.toLowerCase().trim() }).exec();
   }
 
   async findAll(): Promise<UserDocument[]> {
@@ -69,7 +69,7 @@ export class UsersService {
   toResponse(user: UserDocument): UserResponseDto {
     return {
       id: user.id,
-      phone: user.phone,
+      email: user.email,
       name: user.name,
       role: user.role,
     };

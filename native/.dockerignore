@@ -1,0 +1,6 @@
+build
+build-wasm
+opencv-4.x
+opencv-wasm-build
+emscripten
+*.log

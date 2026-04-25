@@ -1,11 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Length, Matches, MinLength } from 'class-validator';
+import { IsEmail, IsString, Length, MinLength } from 'class-validator';
 
 export class RegisterDto {
-  @ApiProperty({ example: '+79991234567' })
-  @IsString()
-  @Matches(/^\+?\d{10,15}$/)
-  phone: string;
+  @ApiProperty({ example: 'ivan@example.com' })
+  @IsEmail()
+  email: string;
 
   @ApiProperty({ example: 'Ivan Fomin' })
   @IsString()

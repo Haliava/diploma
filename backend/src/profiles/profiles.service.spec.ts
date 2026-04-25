@@ -3,14 +3,14 @@ import { Types } from 'mongoose';
 import { BarcodeFormat } from '../common/enums/barcode-format.enum';
 import { CameraResolution, PreferredCamera } from '../common/enums/camera.enum';
 import { ScanMode } from '../common/enums/scan-mode.enum';
+import { UserDocument } from '../users/schemas/user.schema';
 import { ProfilesService } from './profiles.service';
-import { ProfileDocument } from './schemas/profile.schema';
 
 const userId = new Types.ObjectId();
 
-const profile = {
-  id: new Types.ObjectId().toString(),
-  userId,
+const user = {
+  _id: userId,
+  id: userId.toString(),
   scanSettings: {
     captureInterval: 300,
     activeFormats: [BarcodeFormat.Ean13, BarcodeFormat.QrCode],
@@ -23,10 +23,10 @@ const profile = {
     resolution: CameraResolution.R720p,
     torchEnabled: false,
   },
-} as ProfileDocument;
+} as UserDocument;
 
 describe('ProfilesService', () => {
-  const profileModel = {
+  const userModel = {
     findOne: jest.fn(),
     findOneAndUpdate: jest.fn(),
   };
@@ -34,29 +34,26 @@ describe('ProfilesService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ProfilesService(profileModel as never);
+    service = new ProfilesService(userModel as never);
   });
 
-  it('creates a default profile with upsert', async () => {
-    profileModel.findOneAndUpdate.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(profile),
+  it('returns user settings from users collection', async () => {
+    userModel.findOne.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(user),
     });
 
-    await expect(service.createDefaultForUser(userId)).resolves.toBe(profile);
-    expect(profileModel.findOneAndUpdate).toHaveBeenCalledWith(
-      { userId },
-      { $setOnInsert: { userId } },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      },
+    await expect(service.getOrCreateForUser(userId)).resolves.toEqual(
+      service.toResponse(user),
     );
+    expect(userModel.findOne).toHaveBeenCalledWith({
+      _id: userId,
+      isActive: true,
+    });
   });
 
   it('updates only provided scan settings', async () => {
-    profileModel.findOneAndUpdate.mockReturnValue({
-      exec: jest.fn().mockResolvedValue(profile),
+    userModel.findOneAndUpdate.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(user),
     });
 
     await service.updateScanSettings(userId, {
@@ -65,29 +62,24 @@ describe('ProfilesService', () => {
       activeFormats: undefined,
     });
 
-    expect(profileModel.findOneAndUpdate).toHaveBeenCalledWith(
-      { userId },
+    expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: userId, isActive: true },
       {
         $set: {
           'scanSettings.captureInterval': 500,
           'scanSettings.soundEnabled': false,
         },
-        $setOnInsert: { userId },
       },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      },
+      { new: true },
     );
   });
 
-  it('maps profile document to response dto', () => {
-    expect(service.toResponse(profile)).toEqual({
-      id: profile.id,
-      userId: userId.toString(),
-      scanSettings: profile.scanSettings,
-      cameraSettings: profile.cameraSettings,
+  it('maps user document settings to profile response dto', () => {
+    expect(service.toResponse(user)).toEqual({
+      id: user.id,
+      userId: user.id,
+      scanSettings: user.scanSettings,
+      cameraSettings: user.cameraSettings,
     });
   });
 });

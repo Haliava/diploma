@@ -1,4 +1,6 @@
 build/
 build-wasm/
+opencv-4.x
+opencv-wasm-build
 *.wasm
 *.wasm.map

@@ -1,22 +1,15 @@
-import { getUser, loginUserByPhone, refreshUserJwtToken, registerUserByPhone, setUserJwtToken } from "../api/user"
+import { getUser, loginUser, refreshUserJwtToken, registerUser } from "../api/user"
 import { useMutation, useQuery } from "@tanstack/react-query"
 
 export const useUserActions = () => {
-  const { mutateAsync: loginUser, isPending: isLoggingIn } = useMutation({
+  const { mutateAsync: login, isPending: isLoggingIn } = useMutation({
     mutationKey: ['user', 'login'],
-    mutationFn: async ({ phone }: { phone: string }) => 
-      loginUserByPhone(phone)
-        .catch(err => {
-          if (err.code === 404)
-            return registerUserByPhone(phone);
-          throw err
-        }),
-    onSuccess: data => data.data,
+    mutationFn: loginUser,
   })
 
-  const { mutateAsync: setJwtToken, isPending: isSettingJwtToken } = useMutation({
-    mutationKey: ['user', 'token', 'set'],
-    mutationFn: setUserJwtToken,
+  const { mutateAsync: register, isPending: isRegistering } = useMutation({
+    mutationKey: ['user', 'register'],
+    mutationFn: registerUser,
   })
 
   const { mutateAsync: refreshJwtToken, isPending: isRefreshingJwtToken } = useMutation({
@@ -25,10 +18,10 @@ export const useUserActions = () => {
   })
 
   return {
-    loginUser,
+    loginUser: login,
     isLoggingIn,
-    setJwtToken,
-    isSettingJwtToken,
+    registerUser: register,
+    isRegistering,
     refreshJwtToken,
     isRefreshingJwtToken,
   }

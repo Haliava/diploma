@@ -18,7 +18,7 @@ const createUser = (): UserDocument =>
   ({
     _id: userId,
     id: userId.toString(),
-    phone: '+79991234567',
+    email: 'ivan@example.com',
     name: 'Ivan',
     role: Role.User,
     isActive: true,
@@ -38,16 +38,13 @@ describe('AuthService', () => {
     signAsync: jest.fn(),
     verifyAsync: jest.fn(),
   };
-  const profilesService = {
-    createDefaultForUser: jest.fn(),
-  };
   const usersService = {
     create: jest.fn(),
     findActiveById: jest.fn(),
-    findByPhone: jest.fn(),
+    findByEmail: jest.fn(),
     toResponse: jest.fn((user: UserDocument) => ({
       id: user.id,
-      phone: user.phone,
+      email: user.email,
       name: user.name,
       role: user.role,
     })),
@@ -62,15 +59,14 @@ describe('AuthService', () => {
       configService as never,
       eventEmitter as never,
       jwtService as never,
-      profilesService as never,
       usersService as never,
     );
   });
 
-  it('registers a user, creates a default profile, emits event, and returns tokens', async () => {
+  it('registers a user, emits event, and returns tokens', async () => {
     const user = createUser();
 
-    usersService.findByPhone.mockResolvedValue(null);
+    usersService.findByEmail.mockResolvedValue(null);
     usersService.create.mockResolvedValue(user);
     jwtService.signAsync
       .mockResolvedValueOnce('access-token')
@@ -81,24 +77,26 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('refresh-hash' as never);
 
     const result = await service.register({
-      phone: user.phone,
+      email: user.email,
       name: user.name,
       password: 'password123',
     });
 
     expect(usersService.create).toHaveBeenCalledWith({
-      phone: user.phone,
+      email: user.email,
       name: user.name,
       passwordHash: 'password-hash',
     });
-    expect(profilesService.createDefaultForUser).toHaveBeenCalledWith(user._id);
     expect(usersService.updateRefreshTokenHash).toHaveBeenCalledWith(
       user._id,
       'refresh-hash',
     );
-    expect(eventEmitter.emit).toHaveBeenCalledWith(WebhookEventType.UserCreated, {
-      user: usersService.toResponse(user),
-    });
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      WebhookEventType.UserCreated,
+      {
+        user: usersService.toResponse(user),
+      },
+    );
     expect(result).toEqual({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -106,12 +104,12 @@ describe('AuthService', () => {
     });
   });
 
-  it('rejects registration when phone is already used', async () => {
-    usersService.findByPhone.mockResolvedValue(createUser());
+  it('rejects registration when email is already used', async () => {
+    usersService.findByEmail.mockResolvedValue(createUser());
 
     await expect(
       service.register({
-        phone: '+79991234567',
+        email: 'ivan@example.com',
         name: 'Ivan',
         password: 'password123',
       }),
@@ -121,7 +119,7 @@ describe('AuthService', () => {
   it('logs in an active user with a valid password', async () => {
     const user = createUser();
 
-    usersService.findByPhone.mockResolvedValue(user);
+    usersService.findByEmail.mockResolvedValue(user);
     jest.mocked(bcrypt.compare).mockResolvedValue(true as never);
     jest.mocked(bcrypt.hash).mockResolvedValue('refresh-hash' as never);
     jwtService.signAsync
@@ -129,7 +127,7 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('refresh-token');
 
     await expect(
-      service.login({ phone: user.phone, password: 'password123' }),
+      service.login({ email: user.email, password: 'password123' }),
     ).resolves.toMatchObject({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -137,11 +135,11 @@ describe('AuthService', () => {
   });
 
   it('rejects login for invalid password', async () => {
-    usersService.findByPhone.mockResolvedValue(createUser());
+    usersService.findByEmail.mockResolvedValue(createUser());
     jest.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
     await expect(
-      service.login({ phone: '+79991234567', password: 'wrong-password' }),
+      service.login({ email: 'ivan@example.com', password: 'wrong-password' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 

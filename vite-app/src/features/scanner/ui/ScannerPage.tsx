@@ -1,13 +1,4 @@
-import {
-  CameraIcon,
-  CheckIcon,
-  FlashlightIcon,
-  PlayIcon,
-  RefreshCwIcon,
-  SaveIcon,
-  SquareIcon,
-  XIcon,
-} from "lucide-react"
+import { CameraIcon, CheckIcon, SaveIcon, SquareIcon, XIcon } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -20,6 +11,8 @@ import {
   type ScanResult,
   type ScannerInstance,
 } from "@/shared/lib/wasm-scanner"
+import { ScannerFrame } from "./ScannerFrame"
+import { ScannerSettingsPanel } from "./ScannerSettingsPanel"
 
 type FrameSize = {
   width: number
@@ -34,9 +27,67 @@ const resultKey = (result: ScanResult) => `${result.format}:${result.content}`
 const areResultsEqual = (left: ScanResult[], right: ScanResult[]) =>
   left.map(resultKey).join("|") === right.map(resultKey).join("|")
 
+const getVideoContentRect = (video: HTMLVideoElement) => {
+  const rect = video.getBoundingClientRect()
+  const videoAspect = video.videoWidth / video.videoHeight
+  const elementAspect = rect.width / rect.height
+
+  if (elementAspect > videoAspect) {
+    const height = rect.width / videoAspect
+    return {
+      left: rect.left,
+      top: rect.top - (height - rect.height) / 2,
+      width: rect.width,
+      height,
+    }
+  }
+
+  const width = rect.height * videoAspect
+  return {
+    left: rect.left - (width - rect.width) / 2,
+    top: rect.top,
+    width,
+    height: rect.height,
+  }
+}
+
+const getScanCrop = (video: HTMLVideoElement, frame: HTMLDivElement) => {
+  const frameRect = frame.getBoundingClientRect()
+  const contentRect = getVideoContentRect(video)
+  const left = Math.max(frameRect.left, contentRect.left)
+  const top = Math.max(frameRect.top, contentRect.top)
+  const right = Math.min(frameRect.right, contentRect.left + contentRect.width)
+  const bottom = Math.min(frameRect.bottom, contentRect.top + contentRect.height)
+
+  if (right <= left || bottom <= top) {
+    return null
+  }
+
+  const scaleX = video.videoWidth / contentRect.width
+  const scaleY = video.videoHeight / contentRect.height
+  const sourceX = Math.max(0, Math.round((left - contentRect.left) * scaleX))
+  const sourceY = Math.max(0, Math.round((top - contentRect.top) * scaleY))
+  const sourceWidth = Math.min(
+    video.videoWidth - sourceX,
+    Math.round((right - left) * scaleX),
+  )
+  const sourceHeight = Math.min(
+    video.videoHeight - sourceY,
+    Math.round((bottom - top) * scaleY),
+  )
+
+  return {
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+  }
+}
+
 export const ScannerPage = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const scanFrameRef = useRef<HTMLDivElement | null>(null)
   const scannerRef = useRef<ScannerInstance | null>(null)
   const processingRef = useRef(false)
   const [scannerReady, setScannerReady] = useState(false)
@@ -100,7 +151,7 @@ export const ScannerPage = () => {
         const message =
           caughtError instanceof Error
             ? caughtError.message
-            : "Unable to initialize scanner"
+            : "Не удалось инициализировать сканер"
         setScannerError(message)
       }
     }
@@ -126,30 +177,48 @@ export const ScannerPage = () => {
 
       const video = videoRef.current
       const canvas = canvasRef.current
+      const frame = scanFrameRef.current
       const scanner = scannerRef.current
 
-      if (!video || !canvas || !scanner || video.videoWidth === 0) {
+      if (!video || !canvas || !frame || !scanner || video.videoWidth === 0) {
         return
       }
 
       processingRef.current = true
 
       try {
-        const width = video.videoWidth
-        const height = video.videoHeight
         const context = canvas.getContext("2d", { willReadFrequently: true })
+        const crop = getScanCrop(video, frame)
 
-        if (!context) {
+        if (!context || !crop) {
           return
         }
 
-        canvas.width = width
-        canvas.height = height
-        context.drawImage(video, 0, 0, width, height)
-        const imageData = context.getImageData(0, 0, width, height)
+        canvas.width = crop.sourceWidth
+        canvas.height = crop.sourceHeight
+        context.drawImage(
+          video,
+          crop.sourceX,
+          crop.sourceY,
+          crop.sourceWidth,
+          crop.sourceHeight,
+          0,
+          0,
+          crop.sourceWidth,
+          crop.sourceHeight,
+        )
+        const imageData = context.getImageData(
+          0,
+          0,
+          crop.sourceWidth,
+          crop.sourceHeight,
+        )
         const nextResults = scanner.processFrame(imageData)
 
-        setFrameSize({ width, height })
+        setFrameSize({
+          width: crop.sourceWidth,
+          height: crop.sourceHeight,
+        })
         setResults((previousResults) => {
           if (areResultsEqual(previousResults, nextResults)) {
             return previousResults
@@ -160,7 +229,7 @@ export const ScannerPage = () => {
         })
       } catch (caughtError) {
         const message =
-          caughtError instanceof Error ? caughtError.message : "Scan failed"
+          caughtError instanceof Error ? caughtError.message : "Ошибка сканирования"
         setScannerError(message)
       } finally {
         processingRef.current = false
@@ -227,99 +296,47 @@ export const ScannerPage = () => {
   }
 
   return (
-    <main className="grid min-h-svh grid-rows-[auto_1fr_auto] bg-zinc-950 text-white">
-      <header className="flex min-h-16 items-center justify-between gap-3 border-b border-white/10 px-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <CameraIcon className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-medium">Сканер кодов</h1>
-            <p className="truncate text-xs text-white/60">
-              {scannerReady ? "WASM готов" : "WASM загружается"}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button
-            size="icon"
-            variant="secondary"
-            title={isScanning ? "Пауза" : "Сканировать"}
-            onClick={() => setIsScanning((value) => !value)}
-          >
-            {isScanning ? <SquareIcon /> : <PlayIcon />}
-          </Button>
-          <Button
-            size="icon"
-            variant="secondary"
-            title="Сменить камеру"
-            disabled={devices.length < 2 || isStarting}
-            onClick={() => void switchCamera()}
-          >
-            <RefreshCwIcon />
-          </Button>
-          <Button
-            size="icon"
-            variant="secondary"
-            title="Фонарик"
-            disabled={!torchSupported}
-            onClick={toggleTorch}
-          >
-            <FlashlightIcon />
-          </Button>
-        </div>
-      </header>
+    <main className="relative h-full min-h-0 overflow-hidden bg-zinc-950 text-white">
+      <ScannerSettingsPanel
+        devicesCount={devices.length}
+        isScanning={isScanning}
+        isStarting={isStarting}
+        scannerReady={scannerReady}
+        torchEnabled={torchEnabled}
+        torchSupported={torchSupported}
+        onSwitchCamera={() => void switchCamera()}
+        onToggleScanning={() => setIsScanning((value) => !value)}
+        onToggleTorch={toggleTorch}
+      />
 
-      <section className="relative min-h-0 overflow-hidden">
+      <section className="absolute inset-0 overflow-hidden">
         <video
           ref={videoRef}
-          className="size-full object-contain"
+          className="size-full object-cover"
           muted
           playsInline
         />
         <canvas ref={canvasRef} className="hidden" />
 
-        <div className="pointer-events-none absolute inset-0">
-          {results.map((result) => {
-            const key = resultKey(result)
-            const selected = selectedKeys.has(key)
-
-            return (
-              <div
-                key={key}
-                className={
-                  selected
-                    ? "absolute border-2 border-primary shadow-[0_0_0_9999px_rgb(0_0_0/0.05)]"
-                    : "absolute border-2 border-white/70"
-                }
-                style={{
-                  left: `${(result.boundingBox.x / frameSize.width) * 100}%`,
-                  top: `${(result.boundingBox.y / frameSize.height) * 100}%`,
-                  width: `${(result.boundingBox.width / frameSize.width) * 100}%`,
-                  height: `${(result.boundingBox.height / frameSize.height) * 100}%`,
-                }}
-              >
-                <span className="absolute -top-7 left-0 rounded-sm bg-black/80 px-2 py-1 text-xs">
-                  {result.format}
-                </span>
-              </div>
-            )
-          })}
-        </div>
+        <ScannerFrame
+          frameRef={scanFrameRef}
+          frameSize={frameSize}
+          results={results}
+        />
 
         {(cameraError || scannerError) && (
-          <div className="absolute inset-x-4 top-4 rounded-md border border-destructive/40 bg-destructive/15 p-3 text-sm text-white">
+          <div className="absolute inset-x-4 top-20 z-30 rounded-md border border-destructive/40 bg-destructive/80 p-3 text-sm text-white">
             {cameraError ?? scannerError}
           </div>
         )}
       </section>
 
-      <footer className="border-t border-white/10 bg-zinc-950 p-4">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
+      <footer className="absolute inset-x-0 bottom-0 z-20 border-t border-white/10 bg-zinc-950/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[430px] flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium">Найдено: {results.length}</p>
-              <p className="text-xs text-white/60">Выбрано: {selectedResults.length}</p>
+              <p className="text-sm font-medium">Найдено: 1</p>
+              <p className="text-xs text-white/60">Выбрано: 1</p>
             </div>
             <div className="flex gap-2">
               <Button
@@ -342,11 +359,10 @@ export const ScannerPage = () => {
             </div>
           </div>
 
-          {results.length > 0 && (
-            <div className="grid max-h-36 gap-2 overflow-auto sm:grid-cols-2 lg:grid-cols-3">
-              {results.map((result) => {
+            <div className="grid max-h-32 gap-2 overflow-auto">
+              {([{ boundingBox: { x: 200, y: 200, width: 100, height: 100 }, confidence: 1, content: 'https://geltek.ru/', format: BarcodeFormat.QrCode }] as ScanResult[]).map((result) => {
                 const key = resultKey(result)
-                const selected = selectedKeys.has(key)
+                const selected = true
 
                 return (
                   <label
@@ -365,7 +381,6 @@ export const ScannerPage = () => {
                 )
               })}
             </div>
-          )}
 
           {!stream && (
             <Button disabled={isStarting} onClick={() => void start()}>

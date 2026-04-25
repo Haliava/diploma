@@ -6,6 +6,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { DatabaseModule } from './database/database.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { ScanHistoryModule } from './scan-history/scan-history.module';
@@ -28,6 +29,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
       }),
     }),
     EventEmitterModule.forRoot(),
+    DatabaseModule,
     AuthModule,
     UsersModule,
     ProfilesModule,

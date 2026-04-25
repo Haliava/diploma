@@ -32,6 +32,8 @@ export const loadScannerModule = ({
 const createModule = async (wasmBasePath: string, moduleUrl?: string) => {
   const normalizedBasePath = normalizeBasePath(wasmBasePath)
   const resolvedModuleUrl = moduleUrl ?? `${normalizedBasePath}${defaultModuleFileName}`
+  await assertModuleIsAvailable(resolvedModuleUrl)
+
   const moduleImport = (await import(
     /* @vite-ignore */ resolvedModuleUrl
   )) as ScannerModuleImport
@@ -55,6 +57,45 @@ const normalizeBasePath = (path: string) => {
   }
 
   return path.endsWith("/") ? path : `${path}/`
+}
+
+const assertModuleIsAvailable = async (moduleUrl: string) => {
+  const resolvedUrl = new URL(moduleUrl, window.location.href)
+
+  if (resolvedUrl.protocol !== "http:" && resolvedUrl.protocol !== "https:") {
+    throw new WasmScannerError(
+      `Некорректный URL WASM-модуля: ${resolvedUrl.href}`,
+    )
+  }
+
+  try {
+    const response = await fetch(resolvedUrl.href, {
+      cache: "no-store",
+      method: "HEAD",
+    })
+
+    if (response.ok) {
+      return
+    }
+
+    if (response.status === 404) {
+      throw new WasmScannerError(
+        "WASM-модуль сканера не найден. Соберите native/scripts/build-wasm.ps1 или build-wasm.sh, чтобы появились public/wasm/scanner.js и scanner.wasm.",
+      )
+    }
+
+    throw new WasmScannerError(
+      `Не удалось загрузить WASM-модуль сканера: HTTP ${response.status}`,
+    )
+  } catch (error) {
+    if (error instanceof WasmScannerError) {
+      throw error
+    }
+
+    throw new WasmScannerError(
+      "Не удалось проверить WASM-модуль сканера. Проверьте, что public/wasm/scanner.js доступен из Vite dev server.",
+    )
+  }
 }
 
 const resolveFactory = (moduleImport: ScannerModuleImport) => {

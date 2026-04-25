@@ -43,10 +43,10 @@ export class WebhookLog {
   })
   status: WebhookDeliveryStatus;
 
-  @Prop({ default: null })
+  @Prop({ type: Number, default: null })
   httpStatusCode?: number | null;
 
-  @Prop({ default: null })
+  @Prop({ type: String, default: null })
   errorMessage?: string | null;
 
   @Prop({

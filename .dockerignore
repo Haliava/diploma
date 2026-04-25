@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/coverage
+**/.git
+**/.env
+**/.env.*
+**/*.log
+
+native/opencv-4.x
+native/opencv-wasm-build
+native/emscripten
+native/build
+native/build-wasm
+
+ispravlen.docx

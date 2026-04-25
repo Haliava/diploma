@@ -1,0 +1,55 @@
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      MONGODB_URI: mongodb://mongo:27017/diploma_scanner
+      JWT_ACCESS_SECRET: diploma-access-secret
+      JWT_REFRESH_SECRET: diploma-refresh-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 30d
+    depends_on:
+      - mongo
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./vite-app
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+  seed:
+    build:
+      context: ./backend
+      target: seed
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/diploma_scanner
+    depends_on:
+      - mongo
+    profiles:
+      - tools
+
+  native:
+    build:
+      context: ./native
+    profiles:
+      - tools
+
+volumes:
+  mongo-data:
