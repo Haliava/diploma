@@ -1,0 +1,4 @@
+build/
+build-wasm/
+*.wasm
+*.wasm.map

@@ -1,0 +1,25 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "wasm-release",
+      "displayName": "WebAssembly Release",
+      "description": "Configure scanner_wasm with Emscripten. Run through emcmake or provide the Emscripten toolchain file.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-wasm",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SCANNER_COPY_WASM_TO_FRONTEND": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "wasm-release",
+      "configurePreset": "wasm-release",
+      "targets": [
+        "scanner_wasm"
+      ]
+    }
+  ]
+}
